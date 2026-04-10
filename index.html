@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Sportsbook</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --tg-bg: var(--tg-theme-bg-color, #0f1923);
+      --tg-text: var(--tg-theme-text-color, #ffffff);
+      --tg-hint: var(--tg-theme-hint-color, #8a9bb0);
+      --tg-button: var(--tg-theme-button-color, #2196f3);
+      --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+      --accent: #1e88e5;
+      --accent-dim: rgba(30,136,229,0.15);
+      --surface: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.08);
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #0f1923;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #fff;
+    }
+
+    /* ── SPLASH SCREEN ── */
+    #splash {
+      position: fixed; inset: 0;
+      background: #0f1923;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; z-index: 100;
+      transition: opacity 0.4s ease;
+    }
+    #splash.hide { opacity: 0; pointer-events: none; }
+
+    .logo-ring {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: 2px solid rgba(30,136,229,0.3);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .logo-ring::before {
+      content: '';
+      position: absolute; inset: -4px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: #1e88e5;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .logo-inner {
+      width: 52px; height: 52px;
+      background: var(--accent-dim);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .splash-title {
+      font-size: 20px; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .splash-sub {
+      font-size: 13px;
+      color: var(--tg-hint);
+      text-align: center;
+      padding: 0 40px;
+    }
+    .progress-bar {
+      width: 160px; height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; width: 0%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── WALLET BAR (top) ── */
+    #wallet-bar {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 52px;
+      background: rgba(15,25,35,0.96);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px;
+      z-index: 50;
+      transform: translateY(-100%);
+      transition: transform 0.35s ease;
+    }
+    #wallet-bar.show { transform: translateY(0); }
+
+    .wallet-left {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tg-avatar {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1px solid rgba(30,136,229,0.4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #1e88e5;
+    }
+    .user-name {
+      font-size: 13px; font-weight: 600;
+      max-width: 100px; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .wallet-right {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .balance-pill {
+      background: var(--accent-dim);
+      border: 1px solid rgba(30,136,229,0.3);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 12px; font-weight: 700;
+      color: #64b5f6;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .balance-pill .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #4fc3f7;
+    }
+
+    .btn-wallet {
+      padding: 5px 10px;
+      border-radius: 8px;
+      background: var(--accent);
+      border: none; cursor: pointer;
+      font-size: 11px; font-weight: 700;
+      color: #fff; letter-spacing: 0.3px;
+    }
+
+    /* ── MAIN IFRAME WRAPPER ── */
+    #main {
+      position: fixed;
+      top: 52px; left: 0; right: 0; bottom: 0;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #main.show { opacity: 1; }
+
+    #sport-frame {
+      width: 100%; height: 100%;
+      border: none;
+      display: block;
+    }
+
+    /* ── WALLET BOTTOM SHEET ── */
+    #wallet-sheet {
+      position: fixed; inset: 0;
+      z-index: 200;
+      pointer-events: none;
+    }
+    #wallet-sheet.open { pointer-events: all; }
+
+    .sheet-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.6);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    #wallet-sheet.open .sheet-overlay { opacity: 1; }
+
+    .sheet-panel {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: #16232f;
+      border-radius: 20px 20px 0 0;
+      border-top: 1px solid var(--border);
+      padding: 16px 20px 32px;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+    }
+    #wallet-sheet.open .sheet-panel { transform: translateY(0); }
+
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      margin: 0 auto 20px;
+    }
+    .sheet-title {
+      font-size: 17px; font-weight: 700;
+      margin-bottom: 20px;
+    }
+    .balance-display {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .balance-label { font-size: 12px; color: var(--tg-hint); margin-bottom: 4px; }
+    .balance-amount {
+      font-size: 28px; font-weight: 800;
+      color: #fff; letter-spacing: -0.5px;
+    }
+    .balance-unit { font-size: 14px; color: #64b5f6; margin-top: 2px; }
+
+    .tx-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tx-row:last-child { border-bottom: none; }
+    .tx-icon {
+      width: 34px; height: 34px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .tx-icon.in { background: rgba(76,175,80,0.15); }
+    .tx-icon.out { background: rgba(244,67,54,0.15); }
+    .tx-info { flex: 1; }
+    .tx-name { font-size: 13px; font-weight: 600; }
+    .tx-date { font-size: 11px; color: var(--tg-hint); margin-top: 1px; }
+    .tx-amount { font-size: 13px; font-weight: 700; }
+    .tx-amount.in { color: #66bb6a; }
+    .tx-amount.out { color: #ef5350; }
+
+    .sheet-actions {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-top: 20px;
+    }
+    .sheet-btn {
+      padding: 13px;
+      border-radius: 12px;
+      border: none; cursor: pointer;
+      font-size: 13px; font-weight: 700;
+      transition: opacity 0.15s;
+    }
+    .sheet-btn:active { opacity: 0.75; }
+    .sheet-btn.deposit {
+      background: var(--accent);
+      color: #fff;
+    }
+    .sheet-btn.withdraw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: #fff;
+    }
+
+    /* ── DEMO BADGE ── */
+    .demo-badge {
+      position: fixed; bottom: 14px; right: 14px;
+      background: rgba(255,152,0,0.15);
+      border: 1px solid rgba(255,152,0,0.35);
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 10px; font-weight: 700;
+      color: #ffa726;
+      z-index: 60;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+    }
+
+    /* ── ERROR STATE ── */
+    #error-state {
+      position: fixed; inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; padding: 40px;
+      text-align: center;
+    }
+    #error-state.show { display: flex; }
+    .err-icon { font-size: 40px; }
+    .err-title { font-size: 17px; font-weight: 700; }
+    .err-msg { font-size: 13px; color: var(--tg-hint); line-height: 1.5; }
+    .err-retry {
+      margin-top: 8px;
+      padding: 11px 28px;
+      background: var(--accent);
+      border: none; border-radius: 10px;
+      color: #fff; font-size: 14px; font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="logo-ring">
+    <div class="logo-inner">⚽</div>
+  </div>
+  <div class="splash-title">Sportsbook</div>
+  <div class="splash-sub" id="splash-msg">Connecting to Telegram...</div>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress"></div>
+  </div>
+</div>
+
+<!-- WALLET BAR (top) -->
+<div id="wallet-bar">
+  <div class="wallet-left">
+    <div class="tg-avatar" id="tg-avatar">?</div>
+    <span class="user-name" id="user-name">Loading...</span>
+  </div>
+  <div class="wallet-right">
+    <div class="balance-pill">
+      <span class="dot"></span>
+      <span id="balance-display">1,000.00</span>
+      <span style="color:var(--tg-hint);font-weight:400">USDT</span>
+    </div>
+    <button class="btn-wallet" onclick="openWallet()">Wallet</button>
+  </div>
+</div>
+
+<!-- SPORTSBOOK IFRAME -->
+<div id="main">
+  <iframe
+    id="sport-frame"
+    allow="fullscreen"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+  ></iframe>
+</div>
+
+<!-- ERROR STATE -->
+<div id="error-state">
+  <div class="err-icon">⚠️</div>
+  <div class="err-title">Connection failed</div>
+  <div class="err-msg" id="err-msg">Could not load the sportsbook. Please try again.</div>
+  <button class="err-retry" onclick="location.reload()">Retry</button>
+</div>
+
+<!-- DEMO BADGE -->
+<div class="demo-badge">DEMO</div>
+
+<!-- WALLET SHEET -->
+<div id="wallet-sheet">
+  <div class="sheet-overlay" onclick="closeWallet()"></div>
+  <div class="sheet-panel">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">My Wallet</div>
+
+    <div class="balance-display">
+      <div class="balance-label">Available balance</div>
+      <div class="balance-amount" id="sheet-balance">1,000.00</div>
+      <div class="balance-unit">USDT (TON Network)</div>
+    </div>
+
+    <div style="font-size:12px;color:var(--tg-hint);margin-bottom:10px;font-weight:600;letter-spacing:0.5px;">RECENT TRANSACTIONS</div>
+
+    <div class="tx-row">
+      <div class="tx-icon in">+</div>
+      <div class="tx-info">
+        <div class="tx-name">Deposit via TON</div>
+        <div class="tx-date">Today, 14:32</div>
+      </div>
+      <div class="tx-amount in">+500.00</div>
+    </div>
+    <div class="tx-row">
+      <div class="tx-icon out">−</div>
+      <div class="tx-info">
+        <div class="tx-name">Bet placed — Man Utd</div>
+        <div class="tx-date">Today, 11:15</div>
+      </div>
+      <div class="tx-amount out">−100.00</div>
+    </div>
+    <div class="tx-row">
+      <div class="tx-icon in">+</div>
+      <div class="tx-info">
+        <div class="tx-name">Win — Chelsea vs Arsenal</div>
+        <div class="tx-date">Yesterday, 22:10</div>
+      </div>
+      <div class="tx-amount in">+350.00</div>
+    </div>
+    <div class="tx-row">
+      <div class="tx-icon out">−</div>
+      <div class="tx-info">
+        <div class="tx-name">Deposit — Initial</div>
+        <div class="tx-date">2 days ago</div>
+      </div>
+      <div class="tx-amount in">+1,000.00</div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="sheet-btn deposit" onclick="handleDeposit()">Deposit TON</button>
+      <button class="sheet-btn withdraw" onclick="handleWithdraw()">Withdraw</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── CONFIG ─────────────────────────────────────────────────────────
+  const SPORTSBOOK_BASE = 'https://pacific.bucksuno.com/';
+
+  // Demo credentials — in production these come from your Brand Backend
+  const DEMO_AGENT_ID   = '25';
+  const DEMO_TOKEN      = '25-363257af288646531075106f6a3e6511';
+
+  // Demo wallet (in production: fetched from Brand Backend API)
+  let walletBalance = 1000.00;
+
+  // ── TELEGRAM SDK INIT ───────────────────────────────────────────────
+  const tg = window.Telegram?.WebApp;
+
+  function setProgress(pct, msg) {
+    document.getElementById('progress').style.width = pct + '%';
+    if (msg) document.getElementById('splash-msg').textContent = msg;
+  }
+
+  async function init() {
+    try {
+      setProgress(15, 'Initializing Telegram...');
+
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        tg.enableClosingConfirmation();
+        tg.setHeaderColor('#0f1923');
+        tg.setBackgroundColor('#0f1923');
+      }
+
+      await delay(300);
+      setProgress(35, 'Authenticating user...');
+
+      // Get Telegram user info
+      const user = tg?.initDataUnsafe?.user;
+      renderUserBar(user);
+
+      await delay(300);
+      setProgress(60, 'Fetching token...');
+
+      // ── In production: call your Brand Backend ──
+      // const { token, agentId } = await fetch('/api/auth', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ initData: tg.initData })
+      // }).then(r => r.json());
+
+      // Demo: use hardcoded credentials
+      const token   = DEMO_TOKEN;
+      const agentId = DEMO_AGENT_ID;
+
+      await delay(300);
+      setProgress(85, 'Loading sportsbook...');
+
+      // Build iframe URL — same structure as the reference link
+      const url = buildIframeUrl(token, agentId);
+      loadIframe(url);
+
+    } catch (err) {
+      showError('Initialization failed: ' + err.message);
+    }
+  }
+
+  function buildIframeUrl(token, agentId) {
+    const params = new URLSearchParams({
+      token:      token,
+      agentId:    agentId,
+      lng:        'en',
+      sportType:  '1_1',
+      periodId:   '2',
+      sportId:    '1',
+      t:          Date.now().toString(),
+    });
+    return `${SPORTSBOOK_BASE}?${params.toString()}`;
+  }
+
+  function loadIframe(url) {
+    const frame = document.getElementById('sport-frame');
+
+    frame.onload = () => {
+      setProgress(100, 'Ready!');
+      setTimeout(showApp, 400);
+    };
+
+    frame.onerror = () => {
+      showError('Could not load the sportsbook URL.\nCheck CORS settings or network.');
+    };
+
+    // Fallback: show app after 5s even if onload doesn't fire (cross-origin)
+    setTimeout(showApp, 5000);
+
+    frame.src = url;
+  }
+
+  function showApp() {
+    document.getElementById('splash').classList.add('hide');
+    document.getElementById('wallet-bar').classList.add('show');
+    document.getElementById('main').classList.add('show');
+  }
+
+  function renderUserBar(user) {
+    const nameEl   = document.getElementById('user-name');
+    const avatarEl = document.getElementById('tg-avatar');
+
+    if (user) {
+      const name = user.first_name || user.username || 'Player';
+      nameEl.textContent = name;
+      avatarEl.textContent = name.charAt(0).toUpperCase();
+    } else {
+      // Running outside Telegram (browser test)
+      nameEl.textContent = 'Demo User';
+      avatarEl.textContent = 'D';
+    }
+  }
+
+  function updateBalanceDisplay() {
+    const fmt = walletBalance.toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+    document.getElementById('balance-display').textContent = fmt;
+    document.getElementById('sheet-balance').textContent = fmt;
+  }
+
+  // ── WALLET SHEET ───────────────────────────────────────────────────
+  function openWallet() {
+    document.getElementById('wallet-sheet').classList.add('open');
+    tg?.HapticFeedback?.impactOccurred('light');
+  }
+
+  function closeWallet() {
+    document.getElementById('wallet-sheet').classList.remove('open');
+  }
+
+  function handleDeposit() {
+    closeWallet();
+    tg?.HapticFeedback?.impactOccurred('medium');
+
+    if (tg) {
+      // In production: open TON Connect or payment flow
+      tg.showPopup({
+        title: 'Deposit USDT',
+        message: 'Send USDT (TON Network) to your deposit address.\n\nAddress: UQB...demo_address\n\nMin deposit: 10 USDT',
+        buttons: [
+          { id: 'copy',   type: 'default', text: 'Copy Address' },
+          { id: 'cancel', type: 'cancel',  text: 'Close' }
+        ]
+      }, (btnId) => {
+        if (btnId === 'copy') {
+          tg.showAlert('Address copied! (Demo — no real address)');
+        }
+      });
+    } else {
+      alert('Demo: Deposit flow would open TON Connect here.');
+    }
+  }
+
+  function handleWithdraw() {
+    closeWallet();
+    tg?.HapticFeedback?.impactOccurred('medium');
+
+    if (tg) {
+      tg.showPopup({
+        title: 'Withdraw USDT',
+        message: 'Enter your TON wallet address to withdraw.\n\nAvailable: ' + walletBalance.toFixed(2) + ' USDT',
+        buttons: [
+          { id: 'proceed', type: 'default', text: 'Enter Address' },
+          { id: 'cancel',  type: 'cancel',  text: 'Cancel' }
+        ]
+      }, (btnId) => {
+        if (btnId === 'proceed') {
+          tg.showAlert('Withdraw flow coming soon! (Demo)');
+        }
+      });
+    } else {
+      alert('Demo: Withdraw flow would open here.');
+    }
+  }
+
+  // ── ERROR HANDLING ─────────────────────────────────────────────────
+  function showError(msg) {
+    document.getElementById('splash').classList.add('hide');
+    document.getElementById('err-msg').textContent = msg;
+    document.getElementById('error-state').classList.add('show');
+  }
+
+  // ── UTILS ──────────────────────────────────────────────────────────
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ── BOOT ──────────────────────────────────────────────────────────
+  updateBalanceDisplay();
+  init();
+</script>
+</body>
+</html>
